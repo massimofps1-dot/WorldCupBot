@@ -4,7 +4,7 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import google.generativeai as genai
-from duckduckgo_search import DDGS  # 🦆 新增：超穩定的網路搜尋外掛
+from duckduckgo_search import DDGS
 
 # ==========================================
 # 1. Web 伺服器保活機制
@@ -41,7 +41,7 @@ async def on_ready():
     print(f"✅ 機器人已成功啟動並登入為 {bot.user}")
 
 # ==========================================
-# 3. 具備「自動爬取最新賽況」的 AI 大腦
+# 3. 全能助理 AI 大腦 (包含網路搜尋)
 # ==========================================
 @bot.event
 async def on_message(message):
@@ -52,24 +52,24 @@ async def on_message(message):
         user_input = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
         if not user_input:
-            await message.reply("你要問我什麼比賽的預測？直接說！")
+            await message.reply("有什麼我可以幫忙的嗎？")
             return
 
         try:
             async with message.channel.typing():
                 
-                # 🌐 機器人動作一：化身爬蟲，先去網路上抓取最新的前 3 筆相關新聞
+                # 🌐 網路搜尋外掛
                 try:
-                    search_results = DDGS().text(f"{user_input} 最新賽況 賠率", max_results=3)
-                    latest_news = "\n".join([f"最新消息: {res['body']}" for res in search_results]) if search_results else "目前網路上無最新相關新聞。"
+                    search_results = DDGS().text(f"{user_input}", max_results=3)
+                    latest_news = "\n".join([f"參考資料: {res['body']}" for res in search_results]) if search_results else "網路上無相關最新資訊。"
                 except Exception:
-                    latest_news = "網路搜尋暫時無回應，請直接使用你的內建知識庫庫分析。"
+                    latest_news = "網路搜尋暫時無回應，請直接使用你的內建知識庫分析。"
 
                 user_id = message.author.id
 
-                # 🤖 機器人動作二：喚醒 AI 大腦
+                # 🤖 AI 大腦與全能助理人設
                 if user_id not in user_chats:
-                   system_prompt = (
+                    system_prompt = (
                         "你現在是一個聰明、友善且無所不知的專屬 AI 助理。"
                         "你可以回答任何領域的問題、協助撰寫程式碼、提供生活建議或進行閒聊。"
                         "請根據用戶的問題提供實用、準確的解答。"
@@ -81,11 +81,11 @@ async def on_message(message):
                     )
                     user_chats[user_id] = model.start_chat(history=[])
 
-                # 🧠 機器人動作三：把「最新新聞」跟「你的問題」打包在一起，請 AI 統整回答
-                combined_prompt = f"【剛剛從網路上查到的最新資訊】\n{latest_news}\n\n【用戶的提問】\n{user_input}"
+                # 🧠 統整問題並回覆
+                combined_prompt = f"【網路參考資訊】\n{latest_news}\n\n【用戶提問】\n{user_input}"
                 response = user_chats[user_id].send_message(combined_prompt)
                 
-                # ✂️ 機器人動作四：自動分段，解決 2000 字限制
+                # ✂️ 自動分段，解決字數限制
                 reply_text = response.text
                 if len(reply_text) > 1900:
                     for i in range(0, len(reply_text), 1900):
