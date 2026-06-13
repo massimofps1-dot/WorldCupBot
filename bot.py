@@ -4,6 +4,7 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 import google.generativeai as genai
+from duckduckgo_search import DDGS  # 🦆 新增：超穩定的網路搜尋外掛
 
 # ==========================================
 # 1. Web 伺服器保活機制
@@ -29,12 +30,10 @@ DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
-
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 🌟 用來存放每個人「專屬記憶」的字典
 user_chats = {}
 
 @bot.event
@@ -42,7 +41,7 @@ async def on_ready():
     print(f"✅ 機器人已成功啟動並登入為 {bot.user}")
 
 # ==========================================
-# 3. 具備記憶力、極致穩定的 AI 大腦
+# 3. 具備「自動爬取最新賽況」的 AI 大腦
 # ==========================================
 @bot.event
 async def on_message(message):
@@ -58,27 +57,36 @@ async def on_message(message):
 
         try:
             async with message.channel.typing():
+                
+                # 🌐 機器人動作一：化身爬蟲，先去網路上抓取最新的前 3 筆相關新聞
+                try:
+                    search_results = DDGS().text(f"{user_input} 最新賽況 賠率", max_results=3)
+                    latest_news = "\n".join([f"最新消息: {res['body']}" for res in search_results]) if search_results else "目前網路上無最新相關新聞。"
+                except Exception:
+                    latest_news = "網路搜尋暫時無回應，請直接使用你的內建知識庫庫分析。"
+
                 user_id = message.author.id
 
-                # 如果是新對話，開啟專屬記憶聊天室
+                # 🤖 機器人動作二：喚醒 AI 大腦
                 if user_id not in user_chats:
                     system_prompt = (
                         "你現在是一個精通世界盃足球賽與台灣運彩盤口的超強分析師。"
-                        "請根據你龐大的內建體育資料庫，用專業、精準但帶點幽默的語氣回答用戶。"
-                        "請分析近期戰力，並給出具體的下注建議，告訴用戶下哪個期望值最高。"
+                        "我會提供給你用戶的問題，以及『最新的網路搜尋結果』。"
+                        "請綜合網路最新資訊與你的知識，用專業、精準但帶點幽默的語氣回答。"
+                        "請給出具體的下注建議，告訴用戶下哪個期望值最高。"
                         "結尾請加一句幽默的警語，例如：『球是圓的，運彩有賺有賠，請量力而為啊！』"
                     )
-                    
-                    # 使用穩定的舊版呼叫法與最新 2.5 模型，捨棄衝突的外掛
                     model = genai.GenerativeModel(
                         model_name='gemini-2.5-flash',
                         system_instruction=system_prompt
                     )
                     user_chats[user_id] = model.start_chat(history=[])
 
-                # 💡 關鍵修復：這裡改用「同步」發送訊息，徹底避開 aiohttp 的異步報錯地雷
-                response = user_chats[user_id].send_message(user_input)
-                # 解決 Discord 2000 字限制：將超長訊息分段發送
+                # 🧠 機器人動作三：把「最新新聞」跟「你的問題」打包在一起，請 AI 統整回答
+                combined_prompt = f"【剛剛從網路上查到的最新資訊】\n{latest_news}\n\n【用戶的提問】\n{user_input}"
+                response = user_chats[user_id].send_message(combined_prompt)
+                
+                # ✂️ 機器人動作四：自動分段，解決 2000 字限制
                 reply_text = response.text
                 if len(reply_text) > 1900:
                     for i in range(0, len(reply_text), 1900):
@@ -91,9 +99,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# ==========================================
-# 4. 啟動區塊
-# ==========================================
 if __name__ == "__main__":
     keep_alive()
     bot.run(DISCORD_BOT_TOKEN)
