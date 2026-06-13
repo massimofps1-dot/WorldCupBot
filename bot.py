@@ -75,7 +75,7 @@ async def on_message(message):
                     model = genai.GenerativeModel(
                         model_name='gemini-2.5-flash',
                         system_instruction=system_prompt,
-                        tools='google_search_retrieval' # 🌐 終極殺招：開啟 Google 搜尋能力
+                        tools='google_search' # 🌐 終極殺招：開啟 Google 搜尋能力
                     )
                     # 啟動對話階段（它會自動把未來的對話塞進 history 裡面）
                     user_chats[user_id] = model.start_chat(history=[])
