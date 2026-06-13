@@ -78,8 +78,13 @@ async def on_message(message):
 
                 # 💡 關鍵修復：這裡改用「同步」發送訊息，徹底避開 aiohttp 的異步報錯地雷
                 response = user_chats[user_id].send_message(user_input)
-                
-                await message.reply(response.text)
+                # 解決 Discord 2000 字限制：將超長訊息分段發送
+                reply_text = response.text
+                if len(reply_text) > 1900:
+                    for i in range(0, len(reply_text), 1900):
+                        await message.reply(reply_text[i:i+1900])
+                else:
+                    await message.reply(reply_text)
                 
         except Exception as e:
             await message.reply(f"⚠️ 系統異常，錯誤代碼：{e}")
