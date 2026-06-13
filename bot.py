@@ -3,7 +3,10 @@ import discord
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
-import google.generativeai as genai
+
+# 導入全新的 Google GenAI SDK
+from google import genai
+from google.genai import types
 
 # ==========================================
 # 1. Web 伺服器保活機制
@@ -23,18 +26,19 @@ def keep_alive():
     server.start()
 
 # ==========================================
-# 2. 機器人與 AI 核心設定
+# 2. 機器人與全新 AI 核心設定
 # ==========================================
 DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
+# 初始化全新的用戶端
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 🌟 新增：用來存放每個人「專屬記憶」的字典
+# 🌟 用來存放每個人「專屬記憶」的字典
 user_chats = {}
 
 @bot.event
@@ -57,11 +61,11 @@ async def on_message(message):
             return
 
         try:
-            # 讓 Discord 顯示「機器人正在輸入中...」（因為上網查資料需要一點時間）
+            # 讓 Discord 顯示「機器人正在輸入中...」
             async with message.channel.typing():
                 user_id = message.author.id
 
-                # 如果這個人是第一次跟我講話，就幫他開一個全新的「記憶聊天室」
+                # 如果是新對話，使用新版 aio (非同步) 與 types.Tool 語法啟動聊天室
                 if user_id not in user_chats:
                     system_prompt = (
                         "你現在是一個精通世界盃足球賽與台灣運彩盤口的超強分析師。"
@@ -71,17 +75,18 @@ async def on_message(message):
                         "結尾請加一句幽默的警語，例如：『球是圓的，運彩有賺有賠，請量力而為啊！』"
                     )
                     
-                    # 建立模型，並掛載上網能力
-                    model = genai.GenerativeModel(
-                        model_name='gemini-2.5-flash',
-                        system_instruction=system_prompt,
-                        tools='google_search' # 🌐 終極殺招：開啟 Google 搜尋能力
+                    user_chats[user_id] = ai_client.aio.chats.create(
+                        model='gemini-2.5-flash',
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_prompt,
+                            # 🌐 這裡就是官方最新且唯一支援的 Google 搜尋呼叫法
+                            tools=[types.Tool(google_search=types.GoogleSearch())],
+                            temperature=0.7
+                        )
                     )
-                    # 啟動對話階段（它會自動把未來的對話塞進 history 裡面）
-                    user_chats[user_id] = model.start_chat(history=[])
 
-                # 把使用者的話傳進這個「有記憶」的聊天室
-                response = await user_chats[user_id].send_message_async(user_input)
+                # 傳送對話並取得回應
+                response = await user_chats[user_id].send_message(user_input)
                 
                 # 回傳結果
                 await message.reply(response.text)
